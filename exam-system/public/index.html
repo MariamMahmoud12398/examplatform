@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام الامتحانات الإلكتروني</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-box">
+      <div class="logo">
+        <span class="icon">🎓</span>
+        <h1>نظام الامتحانات</h1>
+        <p>منصة الامتحانات الإلكترونية</p>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('login')">تسجيل الدخول</button>
+        <button class="tab-btn" onclick="switchTab('register')">حساب جديد</button>
+      </div>
+
+      <div id="alertBox"></div>
+
+      <!-- تسجيل الدخول -->
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label>📧 البريد الإلكتروني</label>
+          <input type="email" id="loginEmail" class="form-control" placeholder="example@email.com" required>
+        </div>
+        <div class="form-group">
+          <label>🔒 كلمة المرور</label>
+          <input type="password" id="loginPassword" class="form-control" placeholder="كلمة المرور" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;" id="loginBtn">
+          تسجيل الدخول
+        </button>
+      </form>
+
+      <!-- إنشاء حساب -->
+      <form id="registerForm" style="display:none;" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label>👤 الاسم الكامل</label>
+          <input type="text" id="regName" class="form-control" placeholder="أدخل اسمك الكامل" required>
+        </div>
+        <div class="form-group">
+          <label>📧 البريد الإلكتروني</label>
+          <input type="email" id="regEmail" class="form-control" placeholder="example@email.com" required>
+        </div>
+        <div class="form-group">
+          <label>🔒 كلمة المرور</label>
+          <input type="password" id="regPassword" class="form-control" placeholder="6 أحرف على الأقل" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label>👥 نوع الحساب</label>
+          <select id="regRole" class="form-control" required>
+            <option value="">اختر نوع الحساب</option>
+            <option value="teacher">🧑‍🏫 مدرس</option>
+            <option value="student">🧑‍🎓 طالب</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;" id="regBtn">
+          إنشاء الحساب
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    // إذا مسجل دخول، وجّهه للصفحة المناسبة
+    (function() {
+      const user = getUser();
+      const token = getToken();
+      if (user && token) {
+        window.location.href = user.role === 'teacher' ? '/teacher' : '/student';
+      }
+    })();
+
+    function switchTab(tab) {
+      const loginForm = document.getElementById('loginForm');
+      const regForm = document.getElementById('registerForm');
+      const tabs = document.querySelectorAll('.tab-btn');
+
+      if (tab === 'login') {
+        loginForm.style.display = '';
+        regForm.style.display = 'none';
+        tabs[0].classList.add('active');
+        tabs[1].classList.remove('active');
+      } else {
+        loginForm.style.display = 'none';
+        regForm.style.display = '';
+        tabs[0].classList.remove('active');
+        tabs[1].classList.add('active');
+      }
+      document.getElementById('alertBox').innerHTML = '';
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const alertBox = document.getElementById('alertBox');
+      btn.disabled = true;
+      btn.textContent = 'جاري الدخول...';
+
+      const res = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: document.getElementById('loginEmail').value,
+          password: document.getElementById('loginPassword').value
+        })
+      });
+
+      btn.disabled = false;
+      btn.textContent = 'تسجيل الدخول';
+
+      if (res.ok) {
+        setAuth(res.data.token, res.data.user);
+        showAlert(alertBox, 'success', 'تم تسجيل الدخول بنجاح، جاري التوجيه...');
+        setTimeout(() => {
+          window.location.href = res.data.user.role === 'teacher' ? '/teacher' : '/student';
+        }, 800);
+      } else {
+        showAlert(alertBox, 'error', res.data.error);
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const btn = document.getElementById('regBtn');
+      const alertBox = document.getElementById('alertBox');
+      btn.disabled = true;
+      btn.textContent = 'جاري الإنشاء...';
+
+      const res = await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: document.getElementById('regName').value,
+          email: document.getElementById('regEmail').value,
+          password: document.getElementById('regPassword').value,
+          role: document.getElementById('regRole').value
+        })
+      });
+
+      btn.disabled = false;
+      btn.textContent = 'إنشاء الحساب';
+
+      if (res.ok) {
+        setAuth(res.data.token, res.data.user);
+        showAlert(alertBox, 'success', 'تم إنشاء الحساب بنجاح، جاري التوجيه...');
+        setTimeout(() => {
+          window.location.href = res.data.user.role === 'teacher' ? '/teacher' : '/student';
+        }, 800);
+      } else {
+        showAlert(alertBox, 'error', res.data.error);
+      }
+    }
+  </script>
+</body>
+</html>

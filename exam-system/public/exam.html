@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>حل الامتحان</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .exam-header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: var(--shadow);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .exam-header .exam-info h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .exam-header .exam-info p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .exam-body { max-width: 760px; margin: 0 auto; padding: 28px 20px; }
+    .submit-bar {
+      position: sticky;
+      bottom: 0;
+      background: white;
+      border-top: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.07);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .answered-count {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+    .answered-count strong { color: var(--primary); font-size: 1rem; }
+    /* result overlay */
+    .result-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .result-overlay.show { display: flex; }
+    .result-box {
+      background: white;
+      border-radius: 20px;
+      padding: 40px 32px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      animation: slideUp 0.3s;
+    }
+    .result-box h2 { font-size: 1.5rem; font-weight: 800; margin: 20px 0 8px; }
+    .result-box p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 24px; }
+    .result-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .result-stat {
+      background: var(--bg);
+      border-radius: 12px;
+      padding: 14px 8px;
+    }
+    .result-stat .val { font-size: 1.4rem; font-weight: 800; color: var(--primary); }
+    .result-stat .lbl { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="exam-header" id="examHeader">
+  <div class="exam-info">
+    <h2 id="examTitle">جاري التحميل...</h2>
+    <p id="examMeta"></p>
+  </div>
+  <div id="timerBox" class="timer-box">
+    <div class="timer-label">⏱ الوقت المتبقي</div>
+    <div class="timer-value" id="timerDisplay">--:--</div>
+  </div>
+</div>
+
+<!-- Questions -->
+<div class="exam-body" id="examBody">
+  <div class="spinner"></div>
+</div>
+
+<!-- Submit Bar -->
+<div class="submit-bar" id="submitBar" style="display:none;">
+  <div class="answered-count">
+    أجبت على <strong id="answeredCount">0</strong> من <strong id="totalCount">0</strong> سؤال
+  </div>
+  <button class="btn btn-success" onclick="confirmSubmit()" id="submitBtn">
+    ✅ تسليم الامتحان
+  </button>
+</div>
+
+<!-- Result Overlay -->
+<div class="result-overlay" id="resultOverlay">
+  <div class="result-box">
+    <div id="resultEmoji" style="font-size:4rem;"></div>
+    <h2 id="resultTitle"></h2>
+    <p id="resultMessage"></p>
+    <div class="result-stats">
+      <div class="result-stat">
+        <div class="val" id="resStat1">-</div>
+        <div class="lbl">درجتك</div>
+      </div>
+      <div class="result-stat">
+        <div class="val" id="resStat2">-</div>
+        <div class="lbl">النسبة</div>
+      </div>
+      <div class="result-stat">
+        <div class="val" id="resStat3">-</div>
+        <div class="lbl">التقدير</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="goBack()">
+      🏠 العودة للرئيسية
+    </button>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+let currentUser = null;
+let examData = null;
+let attemptId = null;
+let answers = {}; // questionId -> selectedAnswer
+let timerInterval = null;
+let remainingSeconds = 0;
+let totalSeconds = 0;
+let submitted = false;
+
+(async function init() {
+  currentUser = requireAuth('student');
+  if (!currentUser) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const examId = params.get('id');
+  if (!examId) { window.location.href = '/student'; return; }
+
+  await startExam(examId);
+})();
+
+async function startExam(examId) {
+  const res = await apiFetch(`/exams/${examId}/start`, { method: 'POST' });
+
+  if (!res.ok) {
+    document.getElementById('examBody').innerHTML = `
+      <div class="card" style="text-align:center; padding:40px;">
+        <div style="font-size:3rem; margin-bottom:16px;">🚫</div>
+        <h3 style="margin-bottom:8px;">${res.data.error}</h3>
+        <p style="color:var(--text-muted); margin-bottom:24px;">لا يمكن الوصول لهذا الامتحان</p>
+        <button class="btn btn-primary" onclick="window.location.href='/student'">العودة</button>
+      </div>`;
+    return;
+  }
+
+  const data = res.data;
+  attemptId = data.attempt_id;
+  examData = data;
+
+  // Set title
+  document.getElementById('examTitle').textContent = data.exam.title;
+  document.getElementById('examMeta').textContent =
+    `${data.questions.length} سؤال · ${data.exam.duration_minutes} دقيقة${data.resumed ? ' · متابعة من حيث توقفت' : ''}`;
+
+  // Setup timer
+  totalSeconds = data.exam.duration_minutes * 60;
+  remainingSeconds = totalSeconds - (data.elapsed_seconds || 0);
+  if (remainingSeconds <= 0) {
+    autoSubmit();
+    return;
+  }
+
+  startTimer();
+  renderQuestions(data.questions);
+  document.getElementById('submitBar').style.display = 'flex';
+  document.getElementById('totalCount').textContent = data.questions.length;
+  updateAnsweredCount();
+}
+
+function startTimer() {
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    remainingSeconds--;
+    updateTimerDisplay();
+    if (remainingSeconds <= 0) {
+      clearInterval(timerInterval);
+      autoSubmit();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(Math.max(0, remainingSeconds) / 60);
+  const secs = Math.max(0, remainingSeconds) % 60;
+  const display = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  document.getElementById('timerDisplay').textContent = display;
+
+  const box = document.getElementById('timerBox');
+  const pct = remainingSeconds / totalSeconds;
+  box.className = 'timer-box';
+  if (pct <= 0.1) box.classList.add('danger');
+  else if (pct <= 0.25) box.classList.add('warning');
+}
+
+function renderQuestions(questions) {
+  const optionLabels = { a: 'أ', b: 'ب', c: 'ج', d: 'د' };
+
+  const html = questions.map((q, i) => `
+    <div class="question-card" id="qcard-${q.id}">
+      <div class="q-header">
+        <div class="q-num">${i + 1}</div>
+        <div class="q-text">${q.question_text}</div>
+        <span class="q-points">${q.points} ${q.points === 1 ? 'درجة' : 'درجات'}</span>
+      </div>
+      <ul class="options-list">
+        ${['a','b','c','d'].map(opt => `
+          <li class="option-item" id="opt-${q.id}-${opt}" onclick="selectAnswer(${q.id}, '${opt}')">
+            <input type="radio" name="q-${q.id}" value="${opt}">
+            <div class="option-letter">${optionLabels[opt]}</div>
+            <span>${q['option_' + opt]}</span>
+          </li>`).join('')}
+      </ul>
+    </div>`).join('');
+
+  document.getElementById('examBody').innerHTML = html;
+}
+
+function selectAnswer(questionId, option) {
+  if (submitted) return;
+
+  // إلغاء التحديد السابق
+  ['a','b','c','d'].forEach(opt => {
+    document.getElementById(`opt-${questionId}-${opt}`)?.classList.remove('selected');
+  });
+
+  // تحديد الخيار الجديد
+  document.getElementById(`opt-${questionId}-${option}`)?.classList.add('selected');
+  answers[questionId] = option;
+  updateAnsweredCount();
+}
+
+function updateAnsweredCount() {
+  document.getElementById('answeredCount').textContent = Object.keys(answers).length;
+}
+
+function confirmSubmit() {
+  if (submitted) return;
+  const total = examData.questions.length;
+  const answered = Object.keys(answers).length;
+  const unanswered = total - answered;
+
+  if (unanswered > 0) {
+    if (!confirm(`لم تجب على ${unanswered} سؤال بعد. هل تريد التسليم الآن؟`)) return;
+  } else {
+    if (!confirm('هل أنت متأكد من تسليم الامتحان؟')) return;
+  }
+
+  submitExam();
+}
+
+async function autoSubmit() {
+  if (submitted) return;
+  showAutoSubmitBanner();
+  await submitExam(true);
+}
+
+function showAutoSubmitBanner() {
+  const bar = document.getElementById('submitBar');
+  bar.innerHTML = `
+    <div class="alert alert-warning" style="margin:0; flex:1;">
+      ⏰ انتهى الوقت! جاري تسليم إجاباتك تلقائياً...
+    </div>`;
+}
+
+async function submitExam(auto = false) {
+  if (submitted) return;
+  submitted = true;
+  clearInterval(timerInterval);
+
+  const btn = document.getElementById('submitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'جاري التسليم...'; }
+
+  const answersArr = examData.questions.map(q => ({
+    question_id: q.id,
+    selected_answer: answers[q.id] || null
+  }));
+
+  const params = new URLSearchParams(window.location.search);
+  const examId = params.get('id');
+
+  const res = await apiFetch(`/exams/${examId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ attempt_id: attemptId, answers: answersArr })
+  });
+
+  if (res.ok) {
+    showResult(res.data);
+  } else {
+    // حالة استثنائية
+    document.getElementById('examBody').innerHTML = `
+      <div class="alert alert-error">${res.data.error || 'حدث خطأ أثناء التسليم'}</div>`;
+  }
+}
+
+function showResult(result) {
+  const overlay = document.getElementById('resultOverlay');
+  const pct = result.percentage;
+
+  let emoji, title, message, grade;
+  if (pct >= 90)      { emoji = '🌟'; title = 'ممتاز!'; grade = 'ممتاز'; }
+  else if (pct >= 80) { emoji = '⭐'; title = 'جيد جداً!'; grade = 'جيد جداً'; }
+  else if (pct >= 70) { emoji = '👍'; title = 'جيد!'; grade = 'جيد'; }
+  else if (pct >= 60) { emoji = '📚'; title = 'مقبول'; grade = 'مقبول'; }
+  else if (pct >= 50) { emoji = '⚠️'; title = 'ضعيف'; grade = 'ضعيف'; }
+  else                { emoji = '❌'; title = 'راسب'; grade = 'راسب'; }
+
+  message = result.passed
+    ? 'تهانينا! لقد اجتزت الامتحان بنجاح 🎉'
+    : 'لم تجتز الامتحان هذه المرة. حاول مرة أخرى! 💪';
+
+  document.getElementById('resultEmoji').textContent = emoji;
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultMessage').textContent = message;
+  document.getElementById('resStat1').textContent = `${result.score}/${result.total_points}`;
+  document.getElementById('resStat2').textContent = `${pct}%`;
+  document.getElementById('resStat3').textContent = grade;
+
+  overlay.classList.add('show');
+}
+
+function goBack() {
+  window.location.href = '/student';
+}
+
+// منع مغادرة الصفحة أثناء الامتحان
+window.addEventListener('beforeunload', (e) => {
+  if (!submitted && examData) {
+    e.preventDefault();
+    e.returnValue = 'الامتحان لا يزال جارياً. هل تريد المغادرة؟';
+  }
+});
+</script>
+</body>
+</html>

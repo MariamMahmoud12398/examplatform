@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة الطالب</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand"><span>🧑‍🎓</span> لوحة الطالب</div>
+  <div class="nav-user">
+    <div class="user-info">
+      <strong id="navName"></strong>
+      <small>طالب</small>
+    </div>
+    <button class="btn-logout" onclick="logout()">تسجيل الخروج</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div id="alertBox"></div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">📝</div>
+      <div class="stat-value" id="statAvailable">-</div>
+      <div class="stat-label">امتحانات متاحة</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-value" id="statDone">-</div>
+      <div class="stat-label">امتحانات أديتها</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⭐</div>
+      <div class="stat-value" id="statAvg">-</div>
+      <div class="stat-label">متوسط درجاتي</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div style="display:flex; gap:8px; margin-bottom:20px;">
+    <button class="btn btn-primary btn-sm" onclick="showTab('available')" id="tabAvail">📋 الامتحانات المتاحة</button>
+    <button class="btn btn-outline btn-sm" onclick="showTab('results')" id="tabResults">📊 نتائجي</button>
+  </div>
+
+  <!-- Available Exams -->
+  <div id="availableSection">
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 الامتحانات المتاحة</h2>
+        <button class="btn btn-outline btn-sm" onclick="loadData()">🔄 تحديث</button>
+      </div>
+      <div id="examsList"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- My Results -->
+  <div id="resultsSection" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>📊 نتائجي</h2>
+      </div>
+      <div id="myResults"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+let currentUser = null;
+let myResultsData = [];
+
+(function init() {
+  currentUser = requireAuth('student');
+  if (!currentUser) return;
+  document.getElementById('navName').textContent = currentUser.name;
+  loadData();
+})();
+
+function logout() {
+  clearAuth();
+  window.location.href = '/';
+}
+
+function showTab(tab) {
+  const availBtn = document.getElementById('tabAvail');
+  const resBtn = document.getElementById('tabResults');
+  const availSec = document.getElementById('availableSection');
+  const resSec = document.getElementById('resultsSection');
+
+  if (tab === 'available') {
+    availSec.style.display = '';
+    resSec.style.display = 'none';
+    availBtn.className = 'btn btn-primary btn-sm';
+    resBtn.className = 'btn btn-outline btn-sm';
+  } else {
+    availSec.style.display = 'none';
+    resSec.style.display = '';
+    availBtn.className = 'btn btn-outline btn-sm';
+    resBtn.className = 'btn btn-primary btn-sm';
+    loadMyResults();
+  }
+}
+
+async function loadData() {
+  const res = await apiFetch('/exams/available/list');
+  if (!res.ok) return;
+
+  const exams = res.data;
+
+  // Stats
+  document.getElementById('statAvailable').textContent = exams.filter(e => e.allow_retake || e.my_attempts === 0).length;
+
+  const container = document.getElementById('examsList');
+  if (!exams.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>لا توجد امتحانات متاحة حالياً</h3>
+        <p>سيظهر هنا الامتحانات عند نشرها من قبل المدرس</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="exam-grid">${exams.map(renderExamCard).join('')}</div>`;
+
+  // تحديث إحصائيات
+  const done = exams.filter(e => e.my_attempts > 0 && !e.allow_retake).length;
+  document.getElementById('statDone').textContent = exams.filter(e => e.my_attempts > 0).length;
+}
+
+function renderExamCard(exam) {
+  const canTake = exam.allow_retake || exam.my_attempts === 0;
+  const attemptBadge = exam.my_attempts > 0
+    ? `<span class="badge badge-success">✅ أديت ${exam.my_attempts} مرة</span>`
+    : `<span class="badge badge-info">🆕 جديد</span>`;
+
+  return `
+    <div class="exam-card">
+      <div class="exam-title">${exam.title}</div>
+      <div style="margin-bottom:10px;">${attemptBadge}</div>
+      ${exam.description ? `<p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">${exam.description}</p>` : ''}
+      <div class="exam-meta">
+        <span>⏱ ${exam.duration_minutes} دقيقة</span>
+        <span>❓ ${exam.question_count} سؤال</span>
+        <span>🧑‍🏫 ${exam.teacher_name}</span>
+        ${exam.allow_retake ? '<span>🔄 إعادة مسموح</span>' : ''}
+      </div>
+      <div class="exam-actions">
+        ${canTake
+          ? `<button class="btn btn-primary" onclick="startExam(${exam.id})">🚀 ابدأ الامتحان</button>`
+          : `<button class="btn btn-outline" disabled>🚫 لا يمكن إعادة المحاولة</button>`
+        }
+      </div>
+    </div>`;
+}
+
+async function loadMyResults() {
+  const container = document.getElementById('myResults');
+  container.innerHTML = '<div class="spinner"></div>';
+
+  const res = await apiFetch('/exams/my-results/all');
+  if (!res.ok) return;
+
+  myResultsData = res.data;
+
+  // تحديث المتوسط
+  if (myResultsData.length > 0) {
+    const avg = myResultsData.reduce((s, r) => s + (r.percentage || 0), 0) / myResultsData.length;
+    document.getElementById('statAvg').textContent = Math.round(avg) + '%';
+  } else {
+    document.getElementById('statAvg').textContent = '-';
+  }
+
+  document.getElementById('statDone').textContent = myResultsData.length;
+
+  if (!myResultsData.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📊</div>
+        <h3>لا توجد نتائج بعد</h3>
+        <p>أدِّ امتحاناً لترى نتائجك هنا</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>الامتحان</th>
+            <th>المدرس</th>
+            <th>الدرجة</th>
+            <th>النسبة</th>
+            <th>التقدير</th>
+            <th>تاريخ التسليم</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${myResultsData.map(r => `
+            <tr>
+              <td><strong>${r.exam_title}</strong></td>
+              <td>${r.teacher_name}</td>
+              <td>${r.score} / ${r.total_points}</td>
+              <td>
+                <div style="display:flex; align-items:center; gap:8px; min-width:120px;">
+                  <div class="progress-bar" style="flex:1;">
+                    <div class="progress-fill" style="width:${r.percentage}%;
+                      background:${r.percentage >= 80 ? 'var(--success)' : r.percentage >= 50 ? 'var(--warning)' : 'var(--danger)'}">
+                    </div>
+                  </div>
+                  <span style="font-weight:600; font-size:0.875rem;">${r.percentage}%</span>
+                </div>
+              </td>
+              <td>${getGrade(r.percentage)}</td>
+              <td style="color:var(--text-muted); font-size:0.8rem;">${formatDate(r.submitted_at)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function getGrade(pct) {
+  if (pct >= 90) return '<span class="badge badge-success">ممتاز 🌟</span>';
+  if (pct >= 80) return '<span class="badge badge-success">جيد جداً ⭐</span>';
+  if (pct >= 70) return '<span class="badge badge-info">جيد 👍</span>';
+  if (pct >= 60) return '<span class="badge badge-warning">مقبول 📚</span>';
+  if (pct >= 50) return '<span class="badge badge-warning">ضعيف ⚠️</span>';
+  return '<span class="badge badge-danger">راسب ❌</span>';
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleString('ar-EG');
+}
+
+function startExam(examId) {
+  window.location.href = `/exam?id=${examId}`;
+}
+</script>
+</body>
+</html>

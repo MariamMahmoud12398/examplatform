@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>درجات الطلاب</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--primary);
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      margin-bottom: 20px;
+      padding: 6px 0;
+    }
+    .back-btn:hover { text-decoration: underline; }
+    .exam-info-bar {
+      background: linear-gradient(135deg, var(--primary), #7c3aed);
+      color: white;
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .exam-info-bar h2 { font-size: 1.25rem; font-weight: 800; margin-bottom: 4px; }
+    .exam-info-bar p { opacity: 0.85; font-size: 0.875rem; }
+    .exam-info-bar .info-stats {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .exam-info-bar .info-stat { text-align: center; }
+    .exam-info-bar .info-stat .val { font-size: 1.5rem; font-weight: 800; }
+    .exam-info-bar .info-stat .lbl { font-size: 0.75rem; opacity: 0.8; }
+    .rank-medal { font-size: 1.25rem; }
+    .search-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .search-bar input {
+      flex: 1;
+      min-width: 200px;
+    }
+    .score-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 160px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand"><span>📊</span> درجات الطلاب</div>
+  <div class="nav-user">
+    <div class="user-info">
+      <strong id="navName"></strong>
+      <small>مدرس</small>
+    </div>
+    <button class="btn-logout" onclick="logout()">تسجيل الخروج</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div onclick="window.location.href='/teacher'" class="back-btn">← العودة للوحة المدرس</div>
+
+  <div id="alertBox"></div>
+  <div id="pageContent"><div class="spinner"></div></div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+let currentUser = null;
+let allResults = [];
+let examInfo = null;
+
+(async function init() {
+  currentUser = requireAuth('teacher');
+  if (!currentUser) return;
+  document.getElementById('navName').textContent = currentUser.name;
+
+  const params = new URLSearchParams(window.location.search);
+  const examId = params.get('examId');
+  if (!examId) { window.location.href = '/teacher'; return; }
+
+  await loadResults(examId);
+})();
+
+function logout() {
+  clearAuth();
+  window.location.href = '/';
+}
+
+async function loadResults(examId) {
+  const res = await apiFetch(`/exams/${examId}/results`);
+  if (!res.ok) {
+    document.getElementById('pageContent').innerHTML = `
+      <div class="alert alert-error">${res.data.error}</div>`;
+    return;
+  }
+
+  examInfo = res.data.exam;
+  allResults = res.data.results;
+  renderPage();
+}
+
+function renderPage() {
+  if (!allResults.length) {
+    document.getElementById('pageContent').innerHTML = `
+      ${renderInfoBar()}
+      <div class="card">
+        <div class="empty-state">
+          <div class="empty-icon">📊</div>
+          <h3>لا توجد نتائج بعد</h3>
+          <p>لم يؤدِّ أي طالب هذا الامتحان حتى الآن</p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // حسابات إضافية
+  const scores = allResults.map(r => r.percentage || 0);
+  const avg = scores.reduce((s, v) => s + v, 0) / scores.length;
+  const max = Math.max(...scores);
+  const min = Math.min(...scores);
+  const passed = allResults.filter(r => r.percentage >= 50).length;
+
+  document.getElementById('pageContent').innerHTML = `
+    ${renderInfoBar(avg, max, min, passed)}
+
+    <div class="search-bar">
+      <input type="text" class="form-control" id="searchInput" placeholder="🔍 ابحث عن طالب..." oninput="filterResults()">
+      <select class="form-control" id="sortSelect" onchange="filterResults()" style="max-width:200px;">
+        <option value="score_desc">الأعلى درجة أولاً</option>
+        <option value="score_asc">الأدنى درجة أولاً</option>
+        <option value="name_asc">الاسم أ-ي</option>
+        <option value="date_desc">الأحدث أولاً</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>🎓 نتائج الطلاب</h2>
+        <span class="badge badge-info">${allResults.length} طالب</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>اسم الطالب</th>
+              <th>البريد الإلكتروني</th>
+              <th>الدرجة</th>
+              <th>النسبة</th>
+              <th>التقدير</th>
+              <th>وقت التسليم</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            ${renderRows(allResults)}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderInfoBar(avg, max, min, passed) {
+  const hasData = avg !== undefined;
+  return `
+    <div class="exam-info-bar">
+      <div>
+        <h2>${examInfo.title}</h2>
+        <p>⏱ ${examInfo.duration_minutes} دقيقة · ${examInfo.allow_retake ? '🔄 إعادة مسموح' : '🚫 محاولة واحدة'}</p>
+      </div>
+      ${hasData ? `
+      <div class="info-stats">
+        <div class="info-stat">
+          <div class="val">${Math.round(avg)}%</div>
+          <div class="lbl">المتوسط</div>
+        </div>
+        <div class="info-stat">
+          <div class="val">${max}%</div>
+          <div class="lbl">الأعلى</div>
+        </div>
+        <div class="info-stat">
+          <div class="val">${min}%</div>
+          <div class="lbl">الأدنى</div>
+        </div>
+        <div class="info-stat">
+          <div class="val">${passed}/${allResults.length}</div>
+          <div class="lbl">ناجح</div>
+        </div>
+      </div>` : ''}
+    </div>`;
+}
+
+function renderRows(results) {
+  if (!results.length) {
+    return `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:24px;">لا توجد نتائج مطابقة</td></tr>`;
+  }
+
+  return results.map((r, i) => {
+    const pct = r.percentage || 0;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+    const passBadge = pct >= 50
+      ? '<span class="badge badge-success">ناجح</span>'
+      : '<span class="badge badge-danger">راسب</span>';
+
+    return `
+      <tr>
+        <td><span class="rank-medal">${medal}</span></td>
+        <td><strong>${r.student_name}</strong></td>
+        <td style="color:var(--text-muted); font-size:0.8rem;">${r.student_email}</td>
+        <td><strong>${r.score} / ${r.total_points}</strong></td>
+        <td>
+          <div class="score-cell">
+            <div class="progress-bar" style="flex:1;">
+              <div class="progress-fill" style="width:${pct}%;
+                background:${pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'}">
+              </div>
+            </div>
+            <span style="font-weight:700; font-size:0.9rem; min-width:40px;">${pct}%</span>
+          </div>
+        </td>
+        <td>${getGrade(pct)} ${passBadge}</td>
+        <td style="color:var(--text-muted); font-size:0.8rem;">${formatDate(r.submitted_at)}</td>
+      </tr>`;
+  }).join('');
+}
+
+function filterResults() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+
+  let filtered = allResults.filter(r =>
+    r.student_name.toLowerCase().includes(query) ||
+    r.student_email.toLowerCase().includes(query)
+  );
+
+  filtered = filtered.sort((a, b) => {
+    if (sort === 'score_desc') return (b.percentage||0) - (a.percentage||0);
+    if (sort === 'score_asc')  return (a.percentage||0) - (b.percentage||0);
+    if (sort === 'name_asc')   return a.student_name.localeCompare(b.student_name, 'ar');
+    if (sort === 'date_desc')  return new Date(b.submitted_at) - new Date(a.submitted_at);
+    return 0;
+  });
+
+  document.getElementById('resultsBody').innerHTML = renderRows(filtered);
+}
+
+function getGrade(pct) {
+  if (pct >= 90) return '<span class="badge badge-success">ممتاز 🌟</span>';
+  if (pct >= 80) return '<span class="badge badge-success">جيد جداً ⭐</span>';
+  if (pct >= 70) return '<span class="badge badge-info">جيد 👍</span>';
+  if (pct >= 60) return '<span class="badge badge-warning">مقبول</span>';
+  if (pct >= 50) return '<span class="badge badge-warning">ضعيف ⚠️</span>';
+  return '<span class="badge badge-danger">راسب ❌</span>';
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleString('ar-EG');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة المدرس</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="brand"><span>🧑‍🏫</span> لوحة المدرس</div>
+  <div class="nav-user">
+    <div class="user-info">
+      <strong id="navName"></strong>
+      <small>مدرس</small>
+    </div>
+    <button class="btn-logout" onclick="logout()">تسجيل الخروج</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div id="alertBox"></div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-icon">📝</div>
+      <div class="stat-value" id="statExams">-</div>
+      <div class="stat-label">إجمالي الامتحانات</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-value" id="statActive">-</div>
+      <div class="stat-label">امتحانات نشطة</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🎓</div>
+      <div class="stat-value" id="statAttempts">-</div>
+      <div class="stat-label">محاولات الطلاب</div>
+    </div>
+  </div>
+
+  <!-- Exams List -->
+  <div class="card">
+    <div class="card-header">
+      <h2>📋 امتحاناتي</h2>
+      <button class="btn btn-primary btn-sm" onclick="openCreateModal()">
+        ➕ إنشاء امتحان
+      </button>
+    </div>
+    <div id="examsList">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: إنشاء / تعديل امتحان -->
+<div class="modal-overlay" id="examModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">إنشاء امتحان جديد</h3>
+      <button class="modal-close" onclick="closeExamModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="modalAlert"></div>
+      <div class="form-group">
+        <label>عنوان الامتحان *</label>
+        <input type="text" id="examTitle" class="form-control" placeholder="مثال: امتحان الرياضيات الفصل الأول" required>
+      </div>
+      <div class="form-group">
+        <label>وصف الامتحان</label>
+        <textarea id="examDesc" class="form-control" rows="3" placeholder="وصف مختصر عن الامتحان (اختياري)"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>⏱ المدة (بالدقائق) *</label>
+          <input type="number" id="examDuration" class="form-control" placeholder="30" min="1" max="300" required>
+        </div>
+        <div class="form-group" style="display:flex; align-items:flex-end;">
+          <label class="checkbox-group" style="width:100%; margin-bottom:0;">
+            <input type="checkbox" id="examRetake">
+            <span>🔄 السماح بإعادة المحاولة</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-group" id="activeToggleGroup">
+        <label class="checkbox-group">
+          <input type="checkbox" id="examActive" checked>
+          <span>✅ الامتحان نشط (مرئي للطلاب)</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeExamModal()">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveExam()" id="saveExamBtn">حفظ الامتحان</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: إضافة سؤال -->
+<div class="modal-overlay" id="questionModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ إضافة سؤال</h3>
+      <button class="modal-close" onclick="closeQuestionModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="qModalAlert"></div>
+      <div class="form-group">
+        <label>نص السؤال *</label>
+        <textarea id="qText" class="form-control" rows="3" placeholder="أدخل نص السؤال" required></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>🅰 الخيار أ *</label>
+          <input type="text" id="qA" class="form-control" placeholder="الخيار الأول" required>
+        </div>
+        <div class="form-group">
+          <label>🅱 الخيار ب *</label>
+          <input type="text" id="qB" class="form-control" placeholder="الخيار الثاني" required>
+        </div>
+        <div class="form-group">
+          <label>🅲 الخيار ج *</label>
+          <input type="text" id="qC" class="form-control" placeholder="الخيار الثالث" required>
+        </div>
+        <div class="form-group">
+          <label>🅳 الخيار د *</label>
+          <input type="text" id="qD" class="form-control" placeholder="الخيار الرابع" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>✅ الإجابة الصحيحة *</label>
+          <select id="qCorrect" class="form-control" required>
+            <option value="">اختر الإجابة الصحيحة</option>
+            <option value="a">أ</option>
+            <option value="b">ب</option>
+            <option value="c">ج</option>
+            <option value="d">د</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>⭐ الدرجة</label>
+          <input type="number" id="qPoints" class="form-control" value="1" min="1" max="100">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeQuestionModal()">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveQuestion()" id="saveQBtn">إضافة السؤال</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: عرض الأسئلة -->
+<div class="modal-overlay" id="questionsListModal" style="display:none;">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header">
+      <h3 id="qListTitle">أسئلة الامتحان</h3>
+      <button class="modal-close" onclick="document.getElementById('questionsListModal').style.display='none'">×</button>
+    </div>
+    <div class="modal-body" id="questionsListBody">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="openAddQuestion()">➕ إضافة سؤال</button>
+      <button class="btn btn-outline" onclick="document.getElementById('questionsListModal').style.display='none'">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+let currentUser = null;
+let editingExamId = null;
+let currentExamId = null;
+let examsData = [];
+
+(function init() {
+  currentUser = requireAuth('teacher');
+  if (!currentUser) return;
+  document.getElementById('navName').textContent = currentUser.name;
+  loadExams();
+})();
+
+function logout() {
+  clearAuth();
+  window.location.href = '/';
+}
+
+async function loadExams() {
+  const res = await apiFetch('/exams/my-exams');
+  if (!res.ok) return;
+
+  examsData = res.data;
+
+  // Stats
+  document.getElementById('statExams').textContent = examsData.length;
+  document.getElementById('statActive').textContent = examsData.filter(e => e.is_active).length;
+  document.getElementById('statAttempts').textContent = examsData.reduce((s, e) => s + e.attempt_count, 0);
+
+  const container = document.getElementById('examsList');
+  if (!examsData.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📝</div>
+        <h3>لا توجد امتحانات بعد</h3>
+        <p>ابدأ بإنشاء أول امتحان لطلابك</p>
+        <button class="btn btn-primary" onclick="openCreateModal()">➕ إنشاء امتحان</button>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="exam-grid">${examsData.map(renderExamCard).join('')}</div>`;
+}
+
+function renderExamCard(exam) {
+  const statusBadge = exam.is_active
+    ? '<span class="badge badge-success">✅ نشط</span>'
+    : '<span class="badge badge-gray">⏸ متوقف</span>';
+  const retakeBadge = exam.allow_retake
+    ? '<span class="badge badge-info">🔄 إعادة مسموح</span>'
+    : '<span class="badge badge-warning">🚫 محاولة واحدة</span>';
+
+  return `
+    <div class="exam-card">
+      <div class="exam-title">${exam.title}</div>
+      <div style="margin-bottom:10px; display:flex; gap:6px; flex-wrap:wrap;">
+        ${statusBadge} ${retakeBadge}
+      </div>
+      <div class="exam-meta">
+        <span>⏱ ${exam.duration_minutes} دقيقة</span>
+        <span>❓ ${exam.question_count} سؤال</span>
+        <span>🎓 ${exam.attempt_count} محاولة</span>
+      </div>
+      <div class="exam-actions">
+        <button class="btn btn-outline btn-sm" onclick="viewQuestions(${exam.id})">📋 الأسئلة</button>
+        <button class="btn btn-primary btn-sm" onclick="openEditModal(${exam.id})">✏️ تعديل</button>
+        <button class="btn btn-success btn-sm" onclick="viewResults(${exam.id})">📊 الدرجات</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteExam(${exam.id})">🗑</button>
+      </div>
+    </div>`;
+}
+
+// ===== EXAM MODAL =====
+function openCreateModal() {
+  editingExamId = null;
+  document.getElementById('modalTitle').textContent = 'إنشاء امتحان جديد';
+  document.getElementById('examTitle').value = '';
+  document.getElementById('examDesc').value = '';
+  document.getElementById('examDuration').value = '30';
+  document.getElementById('examRetake').checked = false;
+  document.getElementById('examActive').checked = true;
+  document.getElementById('activeToggleGroup').style.display = 'none';
+  document.getElementById('modalAlert').innerHTML = '';
+  document.getElementById('examModal').style.display = 'flex';
+}
+
+function openEditModal(examId) {
+  const exam = examsData.find(e => e.id === examId);
+  if (!exam) return;
+  editingExamId = examId;
+  document.getElementById('modalTitle').textContent = 'تعديل الامتحان';
+  document.getElementById('examTitle').value = exam.title;
+  document.getElementById('examDesc').value = exam.description || '';
+  document.getElementById('examDuration').value = exam.duration_minutes;
+  document.getElementById('examRetake').checked = !!exam.allow_retake;
+  document.getElementById('examActive').checked = !!exam.is_active;
+  document.getElementById('activeToggleGroup').style.display = '';
+  document.getElementById('modalAlert').innerHTML = '';
+  document.getElementById('examModal').style.display = 'flex';
+}
+
+function closeExamModal() {
+  document.getElementById('examModal').style.display = 'none';
+}
+
+async function saveExam() {
+  const title = document.getElementById('examTitle').value.trim();
+  const desc = document.getElementById('examDesc').value.trim();
+  const duration = parseInt(document.getElementById('examDuration').value);
+  const retake = document.getElementById('examRetake').checked;
+  const active = document.getElementById('examActive').checked;
+
+  if (!title || !duration) {
+    showAlert(document.getElementById('modalAlert'), 'error', 'يرجى ملء الحقول المطلوبة');
+    return;
+  }
+
+  const btn = document.getElementById('saveExamBtn');
+  btn.disabled = true;
+  btn.textContent = 'جاري الحفظ...';
+
+  const body = { title, description: desc, duration_minutes: duration, allow_retake: retake, is_active: active };
+
+  const res = editingExamId
+    ? await apiFetch(`/exams/${editingExamId}`, { method: 'PUT', body: JSON.stringify(body) })
+    : await apiFetch('/exams', { method: 'POST', body: JSON.stringify(body) });
+
+  btn.disabled = false;
+  btn.textContent = 'حفظ الامتحان';
+
+  if (res.ok) {
+    closeExamModal();
+    showAlert(document.getElementById('alertBox'), 'success', res.data.message);
+    loadExams();
+  } else {
+    showAlert(document.getElementById('modalAlert'), 'error', res.data.error);
+  }
+}
+
+async function deleteExam(examId) {
+  if (!confirm('هل أنت متأكد من حذف هذا الامتحان؟ سيتم حذف جميع الأسئلة والنتائج.')) return;
+  const res = await apiFetch(`/exams/${examId}`, { method: 'DELETE' });
+  if (res.ok) {
+    showAlert(document.getElementById('alertBox'), 'success', 'تم حذف الامتحان');
+    loadExams();
+  } else {
+    showAlert(document.getElementById('alertBox'), 'error', res.data.error);
+  }
+}
+
+// ===== QUESTIONS =====
+async function viewQuestions(examId) {
+  currentExamId = examId;
+  const exam = examsData.find(e => e.id === examId);
+  document.getElementById('qListTitle').textContent = `أسئلة: ${exam.title}`;
+
+  const res = await apiFetch(`/exams/${examId}`);
+  if (!res.ok) return;
+
+  const questions = res.data.questions;
+  const body = document.getElementById('questionsListBody');
+
+  if (!questions.length) {
+    body.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">❓</div>
+        <h3>لا توجد أسئلة</h3>
+        <p>أضف الأسئلة لهذا الامتحان</p>
+      </div>`;
+  } else {
+    body.innerHTML = questions.map((q, i) => `
+      <div class="question-card" style="margin-bottom:16px;">
+        <div class="q-header">
+          <div class="q-num">${i + 1}</div>
+          <div class="q-text">${q.question_text}</div>
+          <span class="q-points">${q.points} درجة</span>
+        </div>
+        <ul class="options-list">
+          ${['a','b','c','d'].map(opt => `
+            <li class="option-item ${q.correct_answer === opt ? 'correct' : ''}" style="cursor:default;">
+              <div class="option-letter">${opt === 'a' ? 'أ' : opt === 'b' ? 'ب' : opt === 'c' ? 'ج' : 'د'}</div>
+              <span>${q['option_' + opt]}</span>
+              ${q.correct_answer === opt ? '<span style="margin-right:auto;font-size:0.75rem;color:var(--success);">✅ صحيح</span>' : ''}
+            </li>`).join('')}
+        </ul>
+        <div style="margin-top:12px; text-align:left;">
+          <button class="btn btn-danger btn-sm" onclick="deleteQuestion(${examId}, ${q.id})">🗑 حذف</button>
+        </div>
+      </div>`).join('');
+  }
+
+  document.getElementById('questionsListModal').style.display = 'flex';
+}
+
+function openAddQuestion() {
+  document.getElementById('questionsListModal').style.display = 'none';
+  document.getElementById('qText').value = '';
+  document.getElementById('qA').value = '';
+  document.getElementById('qB').value = '';
+  document.getElementById('qC').value = '';
+  document.getElementById('qD').value = '';
+  document.getElementById('qCorrect').value = '';
+  document.getElementById('qPoints').value = '1';
+  document.getElementById('qModalAlert').innerHTML = '';
+  document.getElementById('questionModal').style.display = 'flex';
+}
+
+function closeQuestionModal() {
+  document.getElementById('questionModal').style.display = 'none';
+  if (currentExamId) viewQuestions(currentExamId);
+}
+
+async function saveQuestion() {
+  const body = {
+    question_text: document.getElementById('qText').value.trim(),
+    option_a: document.getElementById('qA').value.trim(),
+    option_b: document.getElementById('qB').value.trim(),
+    option_c: document.getElementById('qC').value.trim(),
+    option_d: document.getElementById('qD').value.trim(),
+    correct_answer: document.getElementById('qCorrect').value,
+    points: parseInt(document.getElementById('qPoints').value) || 1
+  };
+
+  if (!body.question_text || !body.option_a || !body.option_b || !body.option_c || !body.option_d || !body.correct_answer) {
+    showAlert(document.getElementById('qModalAlert'), 'error', 'يرجى ملء جميع الحقول');
+    return;
+  }
+
+  const btn = document.getElementById('saveQBtn');
+  btn.disabled = true;
+  btn.textContent = 'جاري الإضافة...';
+
+  const res = await apiFetch(`/exams/${currentExamId}/questions`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'إضافة السؤال';
+
+  if (res.ok) {
+    document.getElementById('questionModal').style.display = 'none';
+    showAlert(document.getElementById('alertBox'), 'success', 'تم إضافة السؤال بنجاح');
+    loadExams();
+    viewQuestions(currentExamId);
+  } else {
+    showAlert(document.getElementById('qModalAlert'), 'error', res.data.error);
+  }
+}
+
+async function deleteQuestion(examId, questionId) {
+  if (!confirm('هل تريد حذف هذا السؤال؟')) return;
+  const res = await apiFetch(`/exams/${examId}/questions/${questionId}`, { method: 'DELETE' });
+  if (res.ok) {
+    loadExams();
+    viewQuestions(examId);
+  }
+}
+
+// ===== RESULTS =====
+function viewResults(examId) {
+  window.location.href = `/results?examId=${examId}`;
+}
+</script>
+</body>
+</html>
